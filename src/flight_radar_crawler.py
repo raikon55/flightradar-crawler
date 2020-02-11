@@ -3,6 +3,7 @@
 import requests
 import time
 import json
+from datetime import datetime, timedelta
 
 def get_flight() -> dict:
     ignore = ["full_count", "version", "stats"]
@@ -36,12 +37,15 @@ def parser(data: dict) -> dict:
 if __name__ == "__main__":
     dataframe = {}
 
+    duration = timedelta(seconds=10)
+    start_time = datetime.utcnow()
+
     with open("ads-b_data.json", "w+") as ads_b_data:
-        while True:
+        while (datetime.utcnow() - start_time) <= duration:
             try:
                 data = get_flight()
                 dataframe.update(parser(data))
                 time.sleep(1)
             except KeyboardInterrupt:
-                json.dump(dataframe, ads_b_data, indent=2, separators=(",", ":"))
-                exit(0)
+                break
+        json.dump(dataframe, ads_b_data, indent=2, separators=(",", ":"))
