@@ -11,7 +11,12 @@ from datetime import timedelta, datetime
 
 def get_flight() -> dict:
     ignore = ["full_count", "version", "stats"]
-    url = "https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=67.24,-28.43,-461.73,461.73&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1"
+    
+    # Focus on Europe
+    url = "https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=46.82,41.38,-6.96,23.49&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1" 
+    
+    # All globe
+    #url = "https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=67.24,-28.43,-461.73,461.73&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1"
 
     # Request with fake header, otherwise you will get an 403 HTTP error
     r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -30,7 +35,9 @@ def parser(data: dict) -> dict:
     fields = ["Model-S",
               "Latitude",
               "Longitude",
-              3, 4, 5,
+              "Fly-Direction",
+              "Altitude",
+              "Ground-Speed",
               "Transponder",
               "Feeder-Station-Code",
               "Aircraft-Model",
@@ -73,9 +80,10 @@ def save_data(data: dict, file_type: str = 'json'):
                 json.dump(dataframe, ads_b_data, indent=2, separators=(',', ':'))
 
             elif file_type == 'csv':
-                fieldnames = ["Model-S", "Latitude", "Longitude", 3, 4, 5, "Transponder", "Feeder-Station-Code",
-                "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To", "Flight-Code", 14, 15,
-                "Airline-Flight-Code", 17, "Airline"]
+                fieldnames = ["Model-S", "Latitude", "Longitude", "Fly-Direction",
+                "Altitude", "Ground-Speed", "Transponder", "Feeder-Station-Code",
+                "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To",
+                "Flight-Code", 14, 15, "Airline-Flight-Code", 17, "Airline"]
 
                 writer = csv.DictWriter(ads_b_data, fieldnames=fieldnames)
 
@@ -86,7 +94,7 @@ def save_data(data: dict, file_type: str = 'json'):
                     writer.writerow(data[keys])
 
 def connection_database(data:dict):
-    query:str = "INSERT INTO flightradar(`model_s`,`latitude`,`longitude`,`column3`,`column4`,`column5`,`transponder`,`feeder_station`,`aircraft_model`,`aircraft_registration`,`timestamp`,`origin`,`destination`,`flight_code`,`column14`,`column15`,`airline_flight_code`,`column17`,`airline`)\
+    query:str = "INSERT INTO flightradar(`model_s`,`latitude`,`longitude`,`fly_direction`,`altitude`,`ground_speed`,`transponder`,`feeder_station`,`aircraft_model`,`aircraft_registration`,`timestamp`,`origin`,`destination`,`flight_code`,`column14`,`column15`,`airline_flight_code`,`column17`,`airline`)\
     VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     insert_items = []
 
@@ -109,7 +117,6 @@ def connection_database(data:dict):
 
     connection.commit()
     connection.close()
-
 
 if __name__ == "__main__":
     dataframe = {}
