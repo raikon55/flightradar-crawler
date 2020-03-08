@@ -3,7 +3,9 @@
 import requests
 import time
 import json
-from datetime import datetime, timedelta
+import csv
+import os
+from datetime import timedelta, datetime
 
 def get_flight() -> dict:
     ignore = ["full_count", "version", "stats"]
@@ -23,7 +25,22 @@ def parser(data: dict) -> dict:
     clean_data = {}
     
     # Parameters returned of request
-    fields = ["Model-S", "Latitude", "Longitude", 3, 4, 5, "Transponder", "Feeder-Station-Code", "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To", "Flight-Code", 14, 15, "Airline-Flight-Code", 17, "Airline"]
+    fields = ["Model-S",
+              "Latitude",
+              "Longitude",
+              3, 4, 5,
+              "Transponder",
+              "Feeder-Station-Code",
+              "Aircraft-Model",
+              "Aircraft-Registration",
+              "Timestamp",
+              "From",
+              "To",
+              "Flight-Code",
+              14, 15,
+              "Airline-Flight-Code",
+              17,
+              "Airline"]
 
     # Build dict to write in JSON
     for key in data.keys():
@@ -33,19 +50,51 @@ def parser(data: dict) -> dict:
 
     return clean_data
 
+def save_data(data: dict, file_type: str = 'json'):
+    
+    # Format file name
+    file_type = file_type.lower()
+    filename = f'ads-b_data-{datetime.today().strftime("%H-%M-%S_%d-%m-%Y")}.{file_type}'
+    header = True
+
+    if os.path.isfile(filename):
+        header = False
+
+    # Write to selected file
+    with open(filename, 'a') as ads_b_data:
+        if file_type == 'json':
+            json.dump(dataframe, ads_b_data, indent=2, separators=(',', ':'))
+
+        elif file_type == 'csv':
+            fieldnames = ["Model-S", "Latitude", "Longitude", 3, 4, 5, "Transponder", "Feeder-Station-Code",
+              "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To", "Flight-Code", 14, 15,
+              "Airline-Flight-Code", 17, "Airline"]
+
+            writer = csv.DictWriter(ads_b_data, fieldnames=fieldnames)
+
+            if header:
+                writer.writeheader()
+
+            for keys in data.keys():
+                writer.writerow(data[keys])
 
 if __name__ == "__main__":
     dataframe = {}
 
-    duration = timedelta(seconds=10)
+    duration = timedelta(minutes=5)
     start_time = datetime.utcnow()
 
-    with open("ads-b_data.json", "w+") as ads_b_data:
-        while (datetime.utcnow() - start_time) <= duration:
-            try:
-                data = get_flight()
-                dataframe.update(parser(data))
-                time.sleep(1)
-            except KeyboardInterrupt:
-                break
-        json.dump(dataframe, ads_b_data, indent=2, separators=(",", ":"))
+    while (datetime.utcnow() - start_time) <= duration:
+        try:
+            data = get_flight()
+            dataframe.update(parser(data))
+
+            if len(dataframe) >= 1500:
+                save_data(dataframe, 'csv')
+                dataframe.clear()
+
+        except KeyboardInterrupt:
+            save_data(dataframe, 'csv')
+            break
+    else:
+        save_data(dataframe, 'csv')
