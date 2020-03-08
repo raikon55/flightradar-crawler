@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-import requests
-import time
-import json
-import csv
 import os
+import sys
+import csv
+import json
+import time
+import requests
+import MySQLdb as mariadb
 from datetime import timedelta, datetime
 
 def get_flight() -> dict:
@@ -23,7 +25,7 @@ def get_flight() -> dict:
 
 def parser(data: dict) -> dict:
     clean_data = {}
-    
+
     # Parameters returned of request
     fields = ["Model-S",
               "Latitude",
@@ -42,7 +44,7 @@ def parser(data: dict) -> dict:
               17,
               "Airline"]
 
-    # Build dict to write in JSON
+    # Build the dict to save after
     for key in data.keys():
         clean_data[key] = {}
         for field, value in zip(fields, data[key]):
@@ -51,50 +53,79 @@ def parser(data: dict) -> dict:
     return clean_data
 
 def save_data(data: dict, file_type: str = 'json'):
-    
-    # Format file name
-    file_type = file_type.lower()
-    filename = f'ads-b_data-{datetime.today().strftime("%H-%M-%S_%d-%m-%Y")}.{file_type}'
-    header = True
 
-    if os.path.isfile(filename):
-        header = False
+    # If want save on a database
+    if file_type == 'db':
+        connection_database(data)
 
-    # Write to selected file
-    with open(filename, 'a') as ads_b_data:
-        if file_type == 'json':
-            json.dump(dataframe, ads_b_data, indent=2, separators=(',', ':'))
+    else:
+        # Format file name
+        file_type = file_type.lower()
+        filename = f'ads-b_data-{datetime.today().strftime("%H-%M-%S_%d-%m-%Y")}.{file_type}'
+        header = True
 
-        elif file_type == 'csv':
-            fieldnames = ["Model-S", "Latitude", "Longitude", 3, 4, 5, "Transponder", "Feeder-Station-Code",
-              "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To", "Flight-Code", 14, 15,
-              "Airline-Flight-Code", 17, "Airline"]
+        if os.path.isfile(filename):
+            header = False
 
-            writer = csv.DictWriter(ads_b_data, fieldnames=fieldnames)
+        # If is a file, write to selected file
+        with open(filename, 'a') as ads_b_data:
+            if file_type == 'json':
+                json.dump(dataframe, ads_b_data, indent=2, separators=(',', ':'))
 
-            if header:
-                writer.writeheader()
+            elif file_type == 'csv':
+                fieldnames = ["Model-S", "Latitude", "Longitude", 3, 4, 5, "Transponder", "Feeder-Station-Code",
+                "Aircraft-Model", "Aircraft-Registration", "Timestamp", "From", "To", "Flight-Code", 14, 15,
+                "Airline-Flight-Code", 17, "Airline"]
 
-            for keys in data.keys():
-                writer.writerow(data[keys])
+                writer = csv.DictWriter(ads_b_data, fieldnames=fieldnames)
+
+                if header:
+                    writer.writeheader()
+
+                for keys in data.keys():
+                    writer.writerow(data[keys])
+
+def connection_database(data:dict):
+    query:str = "INSERT INTO flightradar(`model_s`,`latitude`,`longitude`,`column3`,`column4`,`column5`,`transponder`,`feeder_station`,`aircraft_model`,`aircraft_registration`,`timestamp`,`origin`,`destination`,`flight_code`,`column14`,`column15`,`airline_flight_code`,`column17`,`airline`)\
+    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+    insert_items = []
+
+    # Transform data into a list of tuples
+    for nested_dict in data.values():
+        insert_items.append(tuple(nested_dict.values()))
+
+    connection = mariadb.connect(host=sys.argv[2], user=sys.argv[3], passwd=sys.argv[4], db=sys.argv[5])
+    cursor = connection.cursor()
+
+    try:
+        cursor.executemany(query, insert_items)
+    except (mariadb._exceptions.OperationalError, mariadb._exceptions.DataError) as exc:
+        print(exc)
+        pass
+    except exc:
+        print(exc)
+        connection.rollback()
+        return
+
+    connection.commit()
+    connection.close()
+
 
 if __name__ == "__main__":
     dataframe = {}
 
-    duration = timedelta(minutes=5)
+    duration = timedelta(minutes=int(sys.argv[1]))
     start_time = datetime.utcnow()
 
     while (datetime.utcnow() - start_time) <= duration:
         try:
             data = get_flight()
             dataframe.update(parser(data))
-
-            if len(dataframe) >= 1500:
-                save_data(dataframe, 'csv')
-                dataframe.clear()
+            save_data(dataframe, 'db')
+            dataframe.clear()
 
         except KeyboardInterrupt:
-            save_data(dataframe, 'csv')
+            save_data(dataframe, 'db')
             break
     else:
-        save_data(dataframe, 'csv')
+        save_data(dataframe, 'db')
